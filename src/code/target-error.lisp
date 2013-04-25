@@ -243,8 +243,10 @@ with that condition (or with no condition) will be returned."
           :datum place-value
           :expected-type type
           :format-control
-          "The value of ~S is ~S, which is not ~:[of type ~S~;~:*~A~]."
-          :format-arguments (list place place-value type-string type))))
+          "The value of ~S is ~S, which is not ~:[of type ~S~;~:*~A~*~] ~
+           but ~2:*~:[~;of type ~]~*~S."
+          :format-arguments (list place place-value type-string type
+                                  (type-of place-value)))))
     (restart-case (error condition)
       (store-value (value)
         :report (lambda (stream)
