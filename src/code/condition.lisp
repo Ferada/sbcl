@@ -627,10 +627,12 @@
    (expected-type :reader type-error-expected-type :initarg :expected-type))
   (:report
    (lambda (condition stream)
-     (format stream
-             "~@<The value ~2I~:_~S ~I~_is not of type ~2I~_~S.~:>"
-             (type-error-datum condition)
-             (type-error-expected-type condition)))))
+     (let ((datum (type-error-datum condition)))
+       (format stream
+               "~@<The value ~2I~:_~S ~I~_is not of type ~2I~_~S ~I~_but ~2I~_~S.~:>"
+               datum
+               (type-error-expected-type condition)
+               (type-of datum))))))
 
 (def!method print-object ((condition type-error) stream)
   (if (and *print-escape*
