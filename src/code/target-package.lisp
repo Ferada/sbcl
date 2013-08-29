@@ -1514,16 +1514,18 @@ PACKAGE."
                 (remove package (the list (package-%used-by-list p))))))
       t)))
 
-(defun find-all-symbols (string-or-symbol)
+(defun find-all-symbols (string-or-symbol &optional external-only)
   #!+sb-doc
-  "Return a list of all symbols in the system having the specified name."
+  "Return a list of all symbols in the system having the specified name. If
+EXTERNAL-ONLY then only return external symbols."
   (let ((string (string string-or-symbol))
         (res ()))
     (with-package-names (names)
       (maphash (lambda (k v)
                  (declare (ignore k))
                  (multiple-value-bind (s w) (find-symbol string v)
-                   (when w (pushnew s res))))
+                   (when (if external-only (eq w :external) w)
+                     (pushnew s res))))
                names))
     res))
 
