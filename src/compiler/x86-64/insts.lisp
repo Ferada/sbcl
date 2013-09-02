@@ -2867,6 +2867,20 @@
   (:emitter
    (emit-byte segment #b11001001)))
 
+;;;; syscall/sysret
+
+(define-instruction syscall (segment)
+  (:printer two-bytes ((op '(#b00001111 #b00000101))))
+  (:emitter
+   (emit-byte segment #b00001111)
+   (emit-byte segment #b00000101)))
+
+(define-instruction sysret (segment)
+  (:printer two-bytes ((op '(#b00001111 #b00000111))))
+  (:emitter
+   (emit-byte segment #b00001111)
+   (emit-byte segment #b00000111)))
+
 ;;;; interrupt instructions
 
 (defun snarf-error-junk (sap offset &optional length-only)
