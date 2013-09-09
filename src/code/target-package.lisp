@@ -1534,8 +1534,15 @@ PACKAGE."
   (prin1 symbol)
   (when (boundp symbol)
     (write-string " (bound)"))
-  (when (fboundp symbol)
-    (write-string " (fbound)")))
+  (cond
+    ((special-operator-p symbol)
+     (write-string " (special)"))
+    ((macro-function symbol)
+     (write-string " (macro)"))
+    ((fboundp symbol)
+     (write-string " (fbound)")))
+  (when (find-class symbol NIL)
+    (write-string " (class)")))
 
 (defun apropos-list (string-designator
                      &optional
