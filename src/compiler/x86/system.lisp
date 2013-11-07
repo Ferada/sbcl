@@ -395,6 +395,41 @@ number of CPU cycles elapsed as secondary value. EXPERIMENTAL."
   (:generator 0
     (inst inc (make-ea-for-vector-data count-vector :offset index))))
 
+;;;; CPUID parsing
+(defknown %cpuid/4 ((unsigned-byte 32) (unsigned-byte 32) (unsigned-byte 32) (unsigned-byte 32))
+  (values (unsigned-byte 32) (unsigned-byte 32) (unsigned-byte 32) (unsigned-byte 32)) ())
+
+;; TODO: make argument-2-4 optional?
+;; TODO: check eflags for cpuid?
+;; TODO: guard against unavailable cpuid?
+(define-vop (%cpuid/4)
+  (:policy :fast-safe)
+  (:translate %cpuid/4)
+  (:temporary (:sc unsigned-reg :offset eax-offset :target result-1) eax)
+  (:temporary (:sc unsigned-reg :offset ebx-offset :target result-2) ebx)
+  (:temporary (:sc unsigned-reg :offset ecx-offset :target result-3) ecx)
+  (:temporary (:sc unsigned-reg :offset edx-offset :target result-4) edx)
+  (:args (argument-1 :scs (unsigned-reg) :target eax)
+         (argument-2 :scs (unsigned-reg) :target ebx)
+         (argument-3 :scs (unsigned-reg) :target ecx)
+         (argument-4 :scs (unsigned-reg) :target edx))
+  (:arg-types unsigned-num unsigned-num unsigned-num unsigned-num)
+  (:results (result-1 :scs (unsigned-reg))
+            (result-2 :scs (unsigned-reg))
+            (result-3 :scs (unsigned-reg))
+            (result-4 :scs (unsigned-reg)))
+  (:result-types unsigned-num unsigned-num unsigned-num unsigned-num)
+  (:generator 3
+    (move eax argument-1)
+    (move ebx argument-2)
+    (move ecx argument-3)
+    (move edx argument-4)
+    (inst cpuid)
+    (move result-1 eax)
+    (move result-2 ebx)
+    (move result-3 ecx)
+    (move result-4 edx)))
+
 ;;;; Memory barrier support
 
 #!+memory-barrier-vops
