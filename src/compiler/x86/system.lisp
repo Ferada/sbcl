@@ -325,6 +325,39 @@
     (note-next-instruction vop :internal-error)
     (inst wait)))
 
+;;;; CPUID detection
+
+(defknown %cpuid-available-p () (values boolean))
+(define-vop (%cpuid-available-p)
+  (:policy :fast-safe)
+  (:translate %cpuid-available-p)
+  (:results (result :scs (descriptor-reg)))
+  (:result-types *)                     ; should be BOOLEAN
+  (:temporary (:sc unsigned-reg :offset eax-offset :target result) eax)
+  (:temporary (:sc unsigned-reg :offset ecx-offset) ecx)
+  (:generator 15
+    (inst pushf)
+    (inst pop eax)
+    (inst mov ecx eax)
+    (inst xor eax #x200000)
+    (inst push eax)
+    (inst popf)
+    (inst pushf)
+    (inst pop eax)
+    (inst push ecx)
+    (inst popf)
+    (inst xor eax ecx)
+    (inst test eax #x200000)
+    (inst jmp :z UNSUPPORTED)
+    (load-symbol result t)
+    (inst jmp DONE)
+    UNSUPPORTED
+    (inst mov result nil-value)
+    DONE))
+
+(defun cpuid-available-p ()
+  (%cpuid-available-p))
+
 ;;;; Miscellany
 
 ;;; the RDTSC instruction (present on Pentium processors and
@@ -396,12 +429,10 @@ number of CPU cycles elapsed as secondary value. EXPERIMENTAL."
     (inst inc (make-ea-for-vector-data count-vector :offset index))))
 
 ;;;; CPUID parsing
+
 (defknown %cpuid/4 ((unsigned-byte 32) (unsigned-byte 32) (unsigned-byte 32) (unsigned-byte 32))
   (values (unsigned-byte 32) (unsigned-byte 32) (unsigned-byte 32) (unsigned-byte 32)) ())
 
-;; TODO: make argument-2-4 optional?
-;; TODO: check eflags for cpuid?
-;; TODO: guard against unavailable cpuid?
 (define-vop (%cpuid/4)
   (:policy :fast-safe)
   (:translate %cpuid/4)
@@ -419,7 +450,7 @@ number of CPU cycles elapsed as secondary value. EXPERIMENTAL."
             (result-3 :scs (unsigned-reg))
             (result-4 :scs (unsigned-reg)))
   (:result-types unsigned-num unsigned-num unsigned-num unsigned-num)
-  (:generator 3
+  (:generator 9
     (move eax argument-1)
     (move ebx argument-2)
     (move ecx argument-3)
