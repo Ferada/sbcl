@@ -42,6 +42,9 @@
  (:type time-t "time_t")
  (:type dev-t "dev_t")
 
+ (:type size-t "size_t")
+ (:type ssize-t "ssize_t")
+
  ;; signals
  (:integer SIGHUP "SIGHUP" "terminal line hangup." t)
  (:integer SIGINT "SIGINT" "interrupt program." t)
@@ -266,6 +269,10 @@
  ;; mlockall()
  (:integer mcl-current "MCL_CURRENT" "mlockall: lock all pages which are currently mapped into the address space of the process." t)
  (:integer mcl-future "MCL_FUTURE" "mlockall: lock all pages which will become mapped into the address space of the process in the future." t)
+
+ ;; setxattr()
+ (:integer xattr-create "XATTR_CREATE" "setxattr: pure create, fail if the named attribute exists already." t)
+ (:integer xattr-replace "XATTR_REPLACE" "setxattr: pure replace operation, fail if the named attribute does not already exist." t)
 
  ;; opendir()
  (:structure dirent

@@ -399,6 +399,127 @@ not supported."
                 ((/= (get-errno) sb-posix:erange)
                  (syscall-error 'getcwd))))))))
 
+#+linux
+(progn
+  (defun %getxattr (function name stringp initial-size initial-buffer)
+    (loop for size = initial-size then (* 2 size)
+          for buffer = (or initial-buffer (make-alien char size)) then (make-alien char size)
+          do (unwind-protect
+                  (let ((count (funcall function buffer size)))
+                    (cond ((plusp count)
+                           (let ((result (make-array count :element-type '(unsigned-byte 8))))
+                             (sb-kernel:copy-ub8-from-system-area (alien-sap buffer) 0 result 0 count)
+                             (return-from %getxattr
+                               (values
+                                (if stringp
+                                    (sb-ext:octets-to-string result :end count)
+                                    result)
+                                (and initial-buffer (shiftf buffer NIL))
+                                (and initial-buffer size)))))
+                          ((/= (get-errno) erange)
+                           (syscall-error name))))
+               (when (and buffer (eq buffer initial-buffer))
+                 (free-alien buffer)))))
+  (defun %setxattr (function name value start end)
+    (let (buffer offset size)
+      (etypecase value
+        (string
+         (setf buffer (sb-ext:string-to-octets
+                       value :start start :end end
+                             :external-format sb-alien::*default-c-string-external-format*)
+               offset 0
+               size (length buffer)))
+        ((or system-area-pointer (vector (unsigned-byte 8)))
+         (setf buffer value
+               offset start
+               size (- end start))))
+      (flet ((aux (sap)
+               (cond ((zerop (funcall function (sb-sys:sap+ sap offset) size))
+                      (values))
+                     (T
+                      (syscall-error name)))))
+        (if (vectorp buffer)
+            (sb-sys:with-pinned-objects (buffer)
+              (aux (sb-sys:vector-sap buffer)))
+            (aux buffer)))))
+  (defun %listxattr (alien-function name function initial-size initial-buffer)
+    (loop for size = initial-size then (* 2 size)
+          for buffer = (or initial-buffer (make-alien char size)) then (make-alien char size)
+          do (unwind-protect
+                  (let ((sap (sb-alien:alien-sap buffer))
+                        (count (funcall alien-function buffer size)))
+                    (cond ((not (minusp count))
+                           (loop with external-format = sb-alien::*default-c-string-external-format*
+                                 with offset fixnum = 0
+                                 while (< offset count)
+                                 do (funcall function
+                                             (sb-alien::c-string-to-string
+                                              (sb-sys:sap+ sap offset)
+                                              external-format
+                                              'character))
+                                 do (loop until (zerop (sb-sys:sap-ref-8 sap offset))
+                                          do (incf offset))
+                                 do (incf offset)
+                                 finally (return-from %listxattr
+                                           (values (and initial-buffer (shiftf buffer NIL))
+                                                   (and initial-buffer size)))))
+                          ((/= (get-errno) erange)
+                           (syscall-error name))))
+               (when (and buffer (not (eq buffer initial-buffer)))
+                 (free-alien buffer)))))
+  (macrolet ((define-getxattr-call (alien designator-fun type)
+               (let ((lisp-name (lisp-for-c-symbol alien)))
+                 `(defun ,lisp-name (path name &optional (stringp T) (initial-size 128) initial-buffer)
+                    (%getxattr
+                     (lambda (buffer size)
+                       (alien-funcall
+                        (extern-alien ,alien (function ssize-t ,type (c-string :not-null t) (* t) size-t))
+                        (,designator-fun path) name buffer size))
+                     ',lisp-name stringp initial-size initial-buffer))))
+             (define-setxattr-call (alien designator-fun type)
+               (let ((lisp-name (lisp-for-c-symbol alien)))
+                 `(defun ,lisp-name (path name value &key (flags 0) (start 0) (end (length value)))
+                    (%setxattr
+                     (lambda (sap size)
+                       (alien-funcall
+                        (extern-alien ,alien (function ssize-t ,type (c-string :not-null t) (* t) size-t int))
+                        (,designator-fun path) name sap size flags))
+                     ',lisp-name value start end))))
+             (define-listxattr-call (alien designator-fun type)
+               (let ((lisp-name (lisp-for-c-symbol alien)))
+                 `(defun ,lisp-name (function path &optional (initial-size 128) initial-buffer)
+                    (%listxattr
+                     (lambda (buffer size)
+                       (alien-funcall
+                        (extern-alien ,alien (function ssize-t ,type (* t) size-t))
+                        (,designator-fun path) buffer size))
+                     ',lisp-name function initial-size initial-buffer))))
+             (define-removexattr-call (alien designator-fun type)
+               (let ((lisp-name (lisp-for-c-symbol alien)))
+                 `(defun ,lisp-name (path name)
+                    (let ((result (alien-funcall
+                                   (extern-alien ,alien (function ssize-t ,type (c-string :not-null t)))
+                                   (,designator-fun path) name)))
+                      (if (zerop result)
+                          (values)
+                          (syscall-error ',lisp-name)))))))
+    (export '(getxattr lgetxattr fgetxattr) :sb-posix)
+    (define-getxattr-call "getxattr" filename (c-string :not-null t))
+    (define-getxattr-call "lgetxattr" filename (c-string :not-null t))
+    (define-getxattr-call "fgetxattr" file-descriptor (integer 32))
+    (export '(setxattr lsetxattr fsetxattr) :sb-posix)
+    (define-setxattr-call "setxattr" filename (c-string :not-null t))
+    (define-setxattr-call "lsetxattr" filename (c-string :not-null t))
+    (define-setxattr-call "fsetxattr" file-descriptor (integer 32))
+    (export '(listxattr llistxattr flistxattr) :sb-posix)
+    (define-listxattr-call "listxattr" filename (c-string :not-null t))
+    (define-listxattr-call "llistxattr" filename (c-string :not-null t))
+    (define-listxattr-call "flistxattr" file-descriptor (integer 32))
+    (export '(removexattr lremovexattr fremovexattr) :sb-posix)
+    (define-removexattr-call "removexattr" filename (c-string :not-null t))
+    (define-removexattr-call "lremovexattr" filename (c-string :not-null t))
+    (define-removexattr-call "fremovexattr" file-descriptor (integer 32))))
+
 #-win32
 (progn
  (export 'wait :sb-posix)
