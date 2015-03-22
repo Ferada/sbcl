@@ -223,9 +223,17 @@
   ;; aren't according to the glossary). However, the behaviour of
   ;; FILE-LENGTH for broadcast streams is explicitly described in the
   ;; BROADCAST-STREAM entry.
-  (unless (typep stream 'broadcast-stream)
-    (stream-must-be-associated-with-file stream))
-  (funcall (ansi-stream-misc stream) stream :file-length))
+  (flet ((stream-length (stream)
+           (funcall (ansi-stream-misc stream) stream :file-length)))
+    (etypecase stream
+      (broadcast-stream
+       (stream-length stream))
+      (stream
+       (stream-must-be-associated-with-file stream)
+       (stream-length stream))
+      ((or pathname string)
+       (with-open-file (stream stream :element-type '(unsigned-byte 8))
+         (stream-length stream))))))
 
 (defun file-string-length (stream object)
   (funcall (ansi-stream-misc stream) stream :file-string-length object))
